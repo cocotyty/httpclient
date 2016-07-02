@@ -21,7 +21,7 @@ import (
 var logger = log.New(os.Stderr, "[http]", log.Ldate | log.Ltime | log.Llongfile)
 
 type HttpService struct {
-	Cache cache.Cache
+	Cache *cache.Cache
 }
 
 func (this *HttpService)Get(sessionid string) *HttpRequest {
