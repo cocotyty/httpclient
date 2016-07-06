@@ -12,15 +12,17 @@ import (
 	"net"
 	"golang.org/x/net/publicsuffix"
 	"github.com/patrickmn/go-cache"
-	"log"
+	"qiniupkg.com/x/log.v7"
 	"bytes"
 	"net/url"
 	"github.com/cocotyty/cookiejar"
+	"golang.org/x/net/proxy"
 )
 
 var logger = log.New(os.Stderr, "[http]", log.Ldate | log.Ltime | log.Llongfile)
 
 type HttpService struct {
+	Proxy string
 	Cache *cache.Cache
 }
 
@@ -29,7 +31,8 @@ func (this *HttpService)Get(sessionid string) *HttpRequest {
 	if data, found := this.Cache.Get("http/" + sessionid); found&&data != nil {
 		jar = data.([]byte)
 	}
-	return &HttpRequest{header:http.Header{}, method:"GET", sessionID:sessionid, service:this, client:clientWithCookieJson(jar)}
+
+	return &HttpRequest{header:http.Header{}, method:"GET", sessionID:sessionid, service:this, client:clientWithCookieJson(jar, this.Proxy)}
 }
 func (this *HttpService)Post(sessionid string) *HttpRequest {
 	var jar []byte
@@ -37,7 +40,7 @@ func (this *HttpService)Post(sessionid string) *HttpRequest {
 		jar = data.([]byte)
 	}
 	fmt.Println(string(jar))
-	return &HttpRequest{header:http.Header{}, method:"POST", sessionID:sessionid, service:this, client:clientWithCookieJson(jar)}
+	return &HttpRequest{header:http.Header{}, method:"POST", sessionID:sessionid, service:this, client:clientWithCookieJson(jar, this.Proxy)}
 }
 
 func (this *HttpService)saveCookie(sessionID string, cookieJar interface{}) {
@@ -185,14 +188,30 @@ func buildEncoded(source map[string][]string, gb18030 bool) []byte {
 	}
 	return result
 }
-func clientWithCookieJson(src []byte) *http.Client {
-	cl := &http.Client{Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify:true},
-		Dial: func(netw, addr string) (net.Conn, error) {
-			d := &net.Dialer{Timeout: time.Second * 90}
-			return d.Dial(netw, addr)
-		},
-	}}
+
+func clientWithCookieJson(src []byte, proxyAddr ... string) *http.Client {
+	var cl *http.Client
+	dialer := &net.Dialer{Timeout: time.Second * 90}
+
+	if len(proxyAddr) == 0 || proxyAddr[0] == "" {
+		cl = &http.Client{Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify:true},
+			Dial:dialer.Dial,
+		}}
+	} else {
+		proxyDialer, _ := proxy.SOCKS5("tcp", proxyAddr[0], nil, dialer)
+		cl = &http.Client{Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify:true},
+			Dial:proxyDialer.Dial,
+		}}
+	}
+	if tr, ok := cl.Transport.(*http.Transport); ok {
+		tr.ExpectContinueTimeout = 0
+	}
+	cl.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		log.Println(req.URL)
+		return nil
+	}
 	if src == nil {
 		Jars, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 		if err != nil {
