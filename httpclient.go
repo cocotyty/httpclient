@@ -63,21 +63,31 @@ type HttpRequest struct {
 	sessionID string
 }
 type HttpResponse struct {
+	err    error
 	header http.Header
 	body   []byte
 }
 
-func (resp *HttpResponse)Body() []byte {
+func (resp *HttpResponse)Body() ([]byte, error) {
+	if resp.err != nil {
+		return nil, resp.err
+	}
 	return resp.body
 }
-func (resp *HttpResponse)Header() http.Header {
+func (resp *HttpResponse)Header() (http.Header) {
 	return resp.header
 }
 
-func (resp *HttpResponse)String() string {
-	return string(resp.body)
+func (resp *HttpResponse)String() (string, error) {
+	if resp.err != nil {
+		return "", resp.err
+	}
+	return string(resp.body), nil
 }
-func (resp *HttpResponse)GB18030() string {
+func (resp *HttpResponse)GB18030() (string, error) {
+	if resp.err != nil {
+		return "", resp.err
+	}
 	data, err := simplifiedchinese.GB18030.NewDecoder().Bytes(resp.body)
 	if err != nil {
 		return string(resp.body)
@@ -140,7 +150,9 @@ func (req *HttpRequest)UTF8() *HttpRequest {
 	req.gb18030 = false
 	return req
 }
-func (req *HttpRequest)Send() (resp *HttpResponse, err error) {
+func (req *HttpRequest)Send() (resp *HttpResponse) {
+	resp = &HttpResponse{}
+	var err error
 	if req.querys != nil {
 		req.url = req.url + "?" + string(buildEncoded(req.querys, req.gb18030))
 	}
@@ -150,13 +162,14 @@ func (req *HttpRequest)Send() (resp *HttpResponse, err error) {
 	if req.jsonData != nil {
 		req.body, err = json.Marshal(req.jsonData)
 		if err != nil {
-			return nil, err
+			resp.err = err
+			return
 		}
 	}
-	logger.Println(req.header, string(req.body), req.url, req.querys, req.method)
 	hrep, err := http.NewRequest(req.method, req.url, bytes.NewReader(req.body))
 	if err != nil {
-		return nil, err
+		resp.err = err
+		return
 	}
 	hrep.Header = req.header
 	hresp, err := req.client.Do(hrep)
@@ -164,13 +177,15 @@ func (req *HttpRequest)Send() (resp *HttpResponse, err error) {
 		defer hresp.Body.Close()
 	}
 	if err != nil {
-		return nil, err
+		resp.err = err
+		return
 	}
 	data, err := ioutil.ReadAll(hresp.Body)
 	if err != nil {
-		return nil, err
+		resp.err = err
+		return
 	}
-	if req.service!=nil{
+	if req.service != nil {
 		req.service.saveCookie(req.sessionID, req.client.Jar)
 	}
 	return &HttpResponse{body:data, header:hresp.Header}, nil
