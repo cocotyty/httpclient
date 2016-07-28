@@ -72,7 +72,7 @@ func (resp *HttpResponse)Body() ([]byte, error) {
 	if resp.err != nil {
 		return nil, resp.err
 	}
-	return resp.body
+	return resp.body, nil
 }
 func (resp *HttpResponse)Header() (http.Header) {
 	return resp.header
@@ -90,9 +90,9 @@ func (resp *HttpResponse)GB18030() (string, error) {
 	}
 	data, err := simplifiedchinese.GB18030.NewDecoder().Bytes(resp.body)
 	if err != nil {
-		return string(resp.body)
+		return string(resp.body), nil
 	}
-	return string(data)
+	return string(data), nil
 }
 func (req *HttpRequest)Url(url string) *HttpRequest {
 	req.url = url
@@ -188,7 +188,7 @@ func (req *HttpRequest)Send() (resp *HttpResponse) {
 	if req.service != nil {
 		req.service.saveCookie(req.sessionID, req.client.Jar)
 	}
-	return &HttpResponse{body:data, header:hresp.Header}, nil
+	return &HttpResponse{body:data, header:hresp.Header}
 }
 func buildEncoded(source map[string][]string, gb18030 bool) []byte {
 	buf := bytes.NewBuffer(nil)
