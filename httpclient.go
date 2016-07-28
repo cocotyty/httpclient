@@ -31,6 +31,7 @@ func (this *HttpService)Get(sessionid string) *HttpRequest {
 	if data, found := this.Cache.Get("http/" + sessionid); found&&data != nil {
 		jar = data.([]byte)
 	}
+	fmt.Println(string(jar))
 
 	return &HttpRequest{header:http.Header{}, method:"GET", sessionID:sessionid, service:this, client:clientWithCookieJson(jar, this.Proxy)}
 }
@@ -68,6 +69,9 @@ type HttpResponse struct {
 
 func (resp *HttpResponse)Body() []byte {
 	return resp.body
+}
+func (resp *HttpResponse)Header() http.Header {
+	return resp.header
 }
 
 func (resp *HttpResponse)String() string {
@@ -166,7 +170,9 @@ func (req *HttpRequest)Send() (resp *HttpResponse, err error) {
 	if err != nil {
 		return nil, err
 	}
-	req.service.saveCookie(req.sessionID, req.client.Jar)
+	if req.service!=nil{
+		req.service.saveCookie(req.sessionID, req.client.Jar)
+	}
 	return &HttpResponse{body:data, header:hresp.Header}, nil
 }
 func buildEncoded(source map[string][]string, gb18030 bool) []byte {
