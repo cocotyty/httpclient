@@ -11,7 +11,6 @@ import (
 	"crypto/tls"
 	"net"
 	"golang.org/x/net/publicsuffix"
-	"github.com/patrickmn/go-cache"
 	"log"
 	"bytes"
 	"net/url"
@@ -19,11 +18,16 @@ import (
 	"golang.org/x/net/proxy"
 )
 
+type Cache interface {
+	Get(key string) (interface{}, bool)
+	Set(key string, value interface{}, exp time.Duration)
+}
+
 var logger = log.New(os.Stderr, "[http]", log.Ldate | log.Ltime | log.Llongfile)
 
 type HttpService struct {
 	Proxy string
-	Cache *cache.Cache
+	Cache Cache
 }
 
 func (this *HttpService)Get(sessionid string) *HttpRequest {
