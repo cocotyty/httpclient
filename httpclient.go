@@ -12,7 +12,7 @@ import (
 	"net"
 	"golang.org/x/net/publicsuffix"
 	"github.com/patrickmn/go-cache"
-	"qiniupkg.com/x/log.v7"
+	"log"
 	"bytes"
 	"net/url"
 	"github.com/cocotyty/cookiejar"
@@ -56,7 +56,7 @@ type HttpRequest struct {
 	header    http.Header
 	body      []byte
 	jsonData  interface{}
-	querys    map[string][]string
+	querys    [][]string
 	params    map[string][]string
 	client    *http.Client
 	service   *HttpService
@@ -66,6 +66,7 @@ type HttpResponse struct {
 	err    error
 	header http.Header
 	body   []byte
+	url    *url.URL
 }
 
 func (resp *HttpResponse)Body() ([]byte, error) {
@@ -77,7 +78,9 @@ func (resp *HttpResponse)Body() ([]byte, error) {
 func (resp *HttpResponse)Header() (http.Header) {
 	return resp.header
 }
-
+func (resp *HttpResponse)URL() *url.URL {
+	return resp.url
+}
 func (resp *HttpResponse)String() (string, error) {
 	if resp.err != nil {
 		return "", resp.err
@@ -100,16 +103,18 @@ func (req *HttpRequest)Url(url string) *HttpRequest {
 }
 func (req *HttpRequest)Query(k, v string) *HttpRequest {
 	if req.querys == nil {
-		req.querys = make(map[string][]string)
+		req.querys = [][]string{}
 	}
-	req.querys[k] = []string{v}
+	req.querys = append(req.querys, []string{k, v})
 	return req
 }
-func (req *HttpRequest)QueryArray(k string, v []string) *HttpRequest {
+func (req *HttpRequest)QueryArray(k string, vs []string) *HttpRequest {
 	if req.querys == nil {
-		req.querys = make(map[string][]string)
+		req.querys = [][]string{}
 	}
-	req.querys[k] = v
+	for _, v := range vs {
+		req.querys = append(req.querys, []string{k, v})
+	}
 	return req
 }
 func (req *HttpRequest)Param(k string, v string) *HttpRequest {
@@ -141,6 +146,7 @@ func (req *HttpRequest)Head(k, v string) *HttpRequest {
 	req.header.Set(k, v)
 	return req
 }
+
 func (req *HttpRequest)GB18030() *HttpRequest {
 	req.gb18030 = true
 	return req
@@ -154,8 +160,9 @@ func (req *HttpRequest)Send() (resp *HttpResponse) {
 	resp = &HttpResponse{}
 	var err error
 	if req.querys != nil {
-		req.url = req.url + "?" + string(buildEncoded(req.querys, req.gb18030))
+		req.url = req.url + "?" + string(buildQueryEncoded(req.querys, req.gb18030))
 	}
+	log.Println(req.url)
 	if req.params != nil {
 		req.body = buildEncoded(req.params, req.gb18030)
 	}
@@ -180,6 +187,7 @@ func (req *HttpRequest)Send() (resp *HttpResponse) {
 		resp.err = err
 		return
 	}
+
 	data, err := ioutil.ReadAll(hresp.Body)
 	if err != nil {
 		resp.err = err
@@ -188,7 +196,26 @@ func (req *HttpRequest)Send() (resp *HttpResponse) {
 	if req.service != nil {
 		req.service.saveCookie(req.sessionID, req.client.Jar)
 	}
-	return &HttpResponse{body:data, header:hresp.Header}
+	return &HttpResponse{body:data, header:hresp.Header, url:hresp.Request.URL}
+}
+
+func buildQueryEncoded(source [][]string, gb18030 bool) []byte {
+	buf := bytes.NewBuffer(nil)
+	for _, kv := range source {
+		k, v := kv[0], kv[1]
+		buf.WriteString(k)
+		buf.WriteByte('=')
+		if gb18030 {
+			v, _ = simplifiedchinese.GB18030.NewEncoder().String(v)
+		}
+		buf.WriteString(url.QueryEscape(v))
+		buf.WriteByte('&')
+	}
+	result := buf.Bytes()
+	if result[len(result) - 1] == '&' {
+		result = result[:len(result) - 1]
+	}
+	return result
 }
 func buildEncoded(source map[string][]string, gb18030 bool) []byte {
 	buf := bytes.NewBuffer(nil)
