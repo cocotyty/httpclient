@@ -91,6 +91,12 @@ func (resp *HttpResponse)String() (string, error) {
 	}
 	return string(resp.body), nil
 }
+func (resp *HttpResponse)JSON(data interface{}) (error) {
+	if resp.err != nil {
+		return resp.err
+	}
+	return json.Unmarshal(resp.body, data)
+}
 func (resp *HttpResponse)GB18030() (string, error) {
 	if resp.err != nil {
 		return "", resp.err
