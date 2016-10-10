@@ -1,21 +1,20 @@
 package httpclient
 
 import (
-	"os"
-	"net/http"
-	"fmt"
-	"encoding/json"
-	"time"
-	"golang.org/x/text/encoding/simplifiedchinese"
-	"io/ioutil"
-	"crypto/tls"
-	"net"
-	"golang.org/x/net/publicsuffix"
-	"log"
 	"bytes"
-	"net/url"
+	"crypto/tls"
+	"encoding/json"
 	"github.com/cocotyty/cookiejar"
 	"golang.org/x/net/proxy"
+	"golang.org/x/net/publicsuffix"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"io/ioutil"
+	"log"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
+	"time"
 )
 
 type Cache interface {
@@ -23,34 +22,34 @@ type Cache interface {
 	Set(key string, value interface{}, exp time.Duration)
 }
 
-var logger = log.New(os.Stderr, "[http]", log.Ldate | log.Ltime | log.Llongfile)
+var logger = log.New(os.Stderr, "[http]", log.Ldate|log.Ltime|log.Llongfile)
 
 type HttpService struct {
 	Proxy string
 	Cache Cache
 }
 
-func (this *HttpService)Get(sessionid string) *HttpRequest {
+func (this *HttpService) Get(sessionid string) *HttpRequest {
 	var jar []byte
-	if data, found := this.Cache.Get("http/" + sessionid); found&&data != nil {
+	if data, found := this.Cache.Get("http/" + sessionid); found && data != nil {
 		jar = data.([]byte)
 	}
-	fmt.Println(string(jar))
-
-	return &HttpRequest{header:http.Header{}, method:"GET", sessionID:sessionid, service:this, client:clientWithCookieJson(jar, this.Proxy)}
+	logger.Println("[cookies]load from cache", string(jar))
+	return &HttpRequest{header: http.Header{}, method: "GET", sessionID: sessionid, service: this, client: clientWithCookieJson(jar, this.Proxy)}
 }
-func (this *HttpService)Post(sessionid string) *HttpRequest {
+func (this *HttpService) Post(sessionid string) *HttpRequest {
 	var jar []byte
-	if data, found := this.Cache.Get("http/" + sessionid); found&&data != nil {
+	if data, found := this.Cache.Get("http/" + sessionid); found && data != nil {
 		jar = data.([]byte)
 	}
-	fmt.Println(string(jar))
-	return &HttpRequest{header:http.Header{}, method:"POST", sessionID:sessionid, service:this, client:clientWithCookieJson(jar, this.Proxy)}
+	logger.Println("[cookies]load from cache", string(jar))
+	return &HttpRequest{header: http.Header{}, method: "POST", sessionID: sessionid, service: this, client: clientWithCookieJson(jar, this.Proxy)}
 }
 
-func (this *HttpService)saveCookie(sessionID string, cookieJar interface{}) {
+func (this *HttpService) saveCookie(sessionID string, cookieJar interface{}) {
 	data, _ := json.Marshal(cookieJar)
-	this.Cache.Set("http/" + sessionID, data, time.Minute * 60)
+	logger.Println("[cookies]save to cache", string(data))
+	this.Cache.Set("http/"+sessionID, data, time.Minute*60)
 }
 
 type HttpRequest struct {
@@ -65,6 +64,7 @@ type HttpRequest struct {
 	client    *http.Client
 	service   *HttpService
 	sessionID string
+	cookies   []*http.Cookie
 }
 type HttpResponse struct {
 	err    error
@@ -73,31 +73,31 @@ type HttpResponse struct {
 	url    *url.URL
 }
 
-func (resp *HttpResponse)Body() ([]byte, error) {
+func (resp *HttpResponse) Body() ([]byte, error) {
 	if resp.err != nil {
 		return nil, resp.err
 	}
 	return resp.body, nil
 }
-func (resp *HttpResponse)Header() (http.Header) {
+func (resp *HttpResponse) Header() http.Header {
 	return resp.header
 }
-func (resp *HttpResponse)URL() *url.URL {
+func (resp *HttpResponse) URL() *url.URL {
 	return resp.url
 }
-func (resp *HttpResponse)String() (string, error) {
+func (resp *HttpResponse) String() (string, error) {
 	if resp.err != nil {
 		return "", resp.err
 	}
 	return string(resp.body), nil
 }
-func (resp *HttpResponse)JSON(data interface{}) (error) {
+func (resp *HttpResponse) JSON(data interface{}) error {
 	if resp.err != nil {
 		return resp.err
 	}
 	return json.Unmarshal(resp.body, data)
 }
-func (resp *HttpResponse)GB18030() (string, error) {
+func (resp *HttpResponse) GB18030() (string, error) {
 	if resp.err != nil {
 		return "", resp.err
 	}
@@ -107,18 +107,26 @@ func (resp *HttpResponse)GB18030() (string, error) {
 	}
 	return string(data), nil
 }
-func (req *HttpRequest)Url(url string) *HttpRequest {
+func (req *HttpRequest) AddCookie(ck *http.Cookie) *HttpRequest{
+	if req.cookies == nil {
+		req.cookies = []*http.Cookie{ck}
+		return req
+	}
+	req.cookies = append(req.cookies, ck)
+	return req
+}
+func (req *HttpRequest) Url(url string) *HttpRequest {
 	req.url = url
 	return req
 }
-func (req *HttpRequest)Query(k, v string) *HttpRequest {
+func (req *HttpRequest) Query(k, v string) *HttpRequest {
 	if req.querys == nil {
 		req.querys = [][]string{}
 	}
 	req.querys = append(req.querys, []string{k, v})
 	return req
 }
-func (req *HttpRequest)QueryArray(k string, vs []string) *HttpRequest {
+func (req *HttpRequest) QueryArray(k string, vs []string) *HttpRequest {
 	if req.querys == nil {
 		req.querys = [][]string{}
 	}
@@ -127,7 +135,7 @@ func (req *HttpRequest)QueryArray(k string, vs []string) *HttpRequest {
 	}
 	return req
 }
-func (req *HttpRequest)Param(k string, v string) *HttpRequest {
+func (req *HttpRequest) Param(k string, v string) *HttpRequest {
 	if req.params == nil {
 		req.params = make(map[string][]string)
 		req.Head("Content-Type", "application/x-www-form-urlencoded")
@@ -135,7 +143,7 @@ func (req *HttpRequest)Param(k string, v string) *HttpRequest {
 	req.params[k] = []string{v}
 	return req
 }
-func (req *HttpRequest)ParamArray(k string, v []string) *HttpRequest {
+func (req *HttpRequest) ParamArray(k string, v []string) *HttpRequest {
 	if req.params == nil {
 		req.params = make(map[string][]string)
 		req.Head("Content-Type", "application/x-www-form-urlencoded")
@@ -143,30 +151,30 @@ func (req *HttpRequest)ParamArray(k string, v []string) *HttpRequest {
 	req.params[k] = v
 	return req
 }
-func (req *HttpRequest)JSON(data interface{}) *HttpRequest {
+func (req *HttpRequest) JSON(data interface{}) *HttpRequest {
 	req.jsonData = data
 	return req
 }
-func (req *HttpRequest)Body(body []byte) *HttpRequest {
+func (req *HttpRequest) Body(body []byte) *HttpRequest {
 	req.body = body
 	return req
 }
 
-func (req *HttpRequest)Head(k, v string) *HttpRequest {
+func (req *HttpRequest) Head(k, v string) *HttpRequest {
 	req.header.Set(k, v)
 	return req
 }
 
-func (req *HttpRequest)GB18030() *HttpRequest {
+func (req *HttpRequest) GB18030() *HttpRequest {
 	req.gb18030 = true
 	return req
 }
 
-func (req *HttpRequest)UTF8() *HttpRequest {
+func (req *HttpRequest) UTF8() *HttpRequest {
 	req.gb18030 = false
 	return req
 }
-func (req *HttpRequest)Send() (resp *HttpResponse) {
+func (req *HttpRequest) Send() (resp *HttpResponse) {
 	resp = &HttpResponse{}
 	var err error
 	if req.querys != nil {
@@ -190,7 +198,7 @@ func (req *HttpRequest)Send() (resp *HttpResponse) {
 	}
 	hrep.Header = req.header
 	hresp, err := req.client.Do(hrep)
-	if hresp != nil&& hresp.Body != nil {
+	if hresp != nil && hresp.Body != nil {
 		defer hresp.Body.Close()
 	}
 	if err != nil {
@@ -206,7 +214,7 @@ func (req *HttpRequest)Send() (resp *HttpResponse) {
 	if req.service != nil {
 		req.service.saveCookie(req.sessionID, req.client.Jar)
 	}
-	return &HttpResponse{body:data, header:hresp.Header, url:hresp.Request.URL}
+	return &HttpResponse{body: data, header: hresp.Header, url: hresp.Request.URL}
 }
 
 func buildQueryEncoded(source [][]string, gb18030 bool) []byte {
@@ -222,8 +230,8 @@ func buildQueryEncoded(source [][]string, gb18030 bool) []byte {
 		buf.WriteByte('&')
 	}
 	result := buf.Bytes()
-	if result[len(result) - 1] == '&' {
-		result = result[:len(result) - 1]
+	if result[len(result)-1] == '&' {
+		result = result[:len(result)-1]
 	}
 	return result
 }
@@ -241,26 +249,26 @@ func buildEncoded(source map[string][]string, gb18030 bool) []byte {
 		}
 	}
 	result := buf.Bytes()
-	if result[len(result) - 1] == '&' {
-		result = result[:len(result) - 1]
+	if result[len(result)-1] == '&' {
+		result = result[:len(result)-1]
 	}
 	return result
 }
 
-func clientWithCookieJson(src []byte, proxyAddr ... string) *http.Client {
+func clientWithCookieJson(src []byte, proxyAddr ...string) *http.Client {
 	var cl *http.Client
 	dialer := &net.Dialer{Timeout: time.Second * 90}
 
 	if len(proxyAddr) == 0 || proxyAddr[0] == "" {
 		cl = &http.Client{Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify:true},
-			Dial:dialer.Dial,
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			Dial:            dialer.Dial,
 		}}
 	} else {
 		proxyDialer, _ := proxy.SOCKS5("tcp", proxyAddr[0], nil, dialer)
 		cl = &http.Client{Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify:true},
-			Dial:proxyDialer.Dial,
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			Dial:            proxyDialer.Dial,
 		}}
 	}
 	if tr, ok := cl.Transport.(*http.Transport); ok {
@@ -286,4 +294,3 @@ func clientWithCookieJson(src []byte, proxyAddr ... string) *http.Client {
 
 	return cl
 }
-
