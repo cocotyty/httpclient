@@ -196,6 +196,9 @@ func (req *HttpRequest) Send() (resp *HttpResponse) {
 		resp.err = err
 		return
 	}
+	if req.cookies!=nil{
+		req.client.Jar.SetCookies(hrep.URL,req.cookies)
+	}
 	hrep.Header = req.header
 	hresp, err := req.client.Do(hrep)
 	if hresp != nil && hresp.Body != nil {
