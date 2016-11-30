@@ -67,12 +67,19 @@ type HttpRequest struct {
 	cookies   []*http.Cookie
 }
 type HttpResponse struct {
+	code   int
 	err    error
 	header http.Header
 	body   []byte
 	url    *url.URL
 }
 
+func (resp *HttpResponse) Code() (int, error) {
+	if resp.err != nil {
+		return nil, resp.err
+	}
+	return resp.code, nil
+}
 func (resp *HttpResponse) Body() ([]byte, error) {
 	if resp.err != nil {
 		return nil, resp.err
@@ -107,7 +114,7 @@ func (resp *HttpResponse) GB18030() (string, error) {
 	}
 	return string(data), nil
 }
-func (req *HttpRequest) AddCookie(ck *http.Cookie) *HttpRequest{
+func (req *HttpRequest) AddCookie(ck *http.Cookie) *HttpRequest {
 	if req.cookies == nil {
 		req.cookies = []*http.Cookie{ck}
 		return req
@@ -196,8 +203,8 @@ func (req *HttpRequest) Send() (resp *HttpResponse) {
 		resp.err = err
 		return
 	}
-	if req.cookies!=nil{
-		req.client.Jar.SetCookies(hrep.URL,req.cookies)
+	if req.cookies != nil {
+		req.client.Jar.SetCookies(hrep.URL, req.cookies)
 	}
 	hrep.Header = req.header
 	hresp, err := req.client.Do(hrep)
@@ -217,7 +224,7 @@ func (req *HttpRequest) Send() (resp *HttpResponse) {
 	if req.service != nil {
 		req.service.saveCookie(req.sessionID, req.client.Jar)
 	}
-	return &HttpResponse{body: data, header: hresp.Header, url: hresp.Request.URL}
+	return &HttpResponse{code: hresp.StatusCode, body: data, header: hresp.Header, url: hresp.Request.URL}
 }
 
 func buildQueryEncoded(source [][]string, gb18030 bool) []byte {
