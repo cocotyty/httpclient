@@ -76,7 +76,7 @@ type HttpResponse struct {
 
 func (resp *HttpResponse) Code() (int, error) {
 	if resp.err != nil {
-		return nil, resp.err
+		return 0, resp.err
 	}
 	return resp.code, nil
 }
