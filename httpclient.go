@@ -9,12 +9,11 @@ import (
 	"golang.org/x/net/publicsuffix"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"time"
+	"github.com/cocotyty/summer"
 )
 
 type Cache interface {
@@ -22,7 +21,7 @@ type Cache interface {
 	Set(key string, value interface{}, exp time.Duration)
 }
 
-var logger = log.New(os.Stderr, "[http]", log.Ldate|log.Ltime|log.Llongfile)
+var logger = summer.NewSimpleLog("http",summer.DebugLevel)
 
 type HttpService struct {
 	Proxy string
@@ -34,7 +33,7 @@ func (this *HttpService) Get(sessionid string) *HttpRequest {
 	if data, found := this.Cache.Get("http/" + sessionid); found && data != nil {
 		jar = data.([]byte)
 	}
-	logger.Println("[cookies]load from cache", string(jar))
+	logger.Debug("[cookies]load from cache", string(jar))
 	return &HttpRequest{header: http.Header{}, method: "GET", sessionID: sessionid, service: this, client: clientWithCookieJson(jar, this.Proxy)}
 }
 func (this *HttpService) Post(sessionid string) *HttpRequest {
@@ -42,13 +41,13 @@ func (this *HttpService) Post(sessionid string) *HttpRequest {
 	if data, found := this.Cache.Get("http/" + sessionid); found && data != nil {
 		jar = data.([]byte)
 	}
-	logger.Println("[cookies]load from cache", string(jar))
+	logger.Debug("[cookies]load from cache", string(jar))
 	return &HttpRequest{header: http.Header{}, method: "POST", sessionID: sessionid, service: this, client: clientWithCookieJson(jar, this.Proxy)}
 }
 
 func (this *HttpService) saveCookie(sessionID string, cookieJar interface{}) {
 	data, _ := json.Marshal(cookieJar)
-	logger.Println("[cookies]save to cache", string(data))
+	logger.Debug("[cookies]save to cache", string(data))
 	this.Cache.Set("http/"+sessionID, data, time.Minute*60)
 }
 
@@ -187,7 +186,7 @@ func (req *HttpRequest) Send() (resp *HttpResponse) {
 	if req.querys != nil {
 		req.url = req.url + "?" + string(buildQueryEncoded(req.querys, req.gb18030))
 	}
-	log.Println(req.url)
+	logger.Debug(req.url)
 	if req.params != nil {
 		req.body = buildEncoded(req.params, req.gb18030)
 	}
@@ -285,19 +284,19 @@ func clientWithCookieJson(src []byte, proxyAddr ...string) *http.Client {
 		tr.ExpectContinueTimeout = 0
 	}
 	cl.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		log.Println(req.URL)
+		logger.Debug(req.URL)
 		return nil
 	}
 	if src == nil {
 		Jars, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 		if err != nil {
-			logger.Println("[cookie-jar-err]", err)
+			logger.Debug("[cookie-jar-err]", err)
 		}
 		cl.Jar = Jars
 	} else {
 		Jars, err := cookiejar.LoadFromJson(&cookiejar.Options{PublicSuffixList: publicsuffix.List}, src)
 		if err != nil {
-			logger.Println("[cookie-jar-err]", err)
+			logger.Debug("[cookie-jar-err]", err)
 		}
 		cl.Jar = Jars
 	}
