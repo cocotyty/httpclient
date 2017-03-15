@@ -21,10 +21,11 @@ type Cache interface {
 	Set(key string, value interface{}, exp time.Duration)
 }
 
-var logger = summer.NewSimpleLog("http",summer.DebugLevel)
+var logger = summer.NewSimpleLog("http", summer.DebugLevel)
 
 type HttpService struct {
 	Proxy string
+	Auth  *proxy.Auth
 	Cache Cache
 }
 
@@ -34,7 +35,7 @@ func (this *HttpService) Get(sessionid string) *HttpRequest {
 		jar = data.([]byte)
 	}
 	logger.Debug("[cookies]load from cache", string(jar))
-	return &HttpRequest{header: http.Header{}, method: "GET", sessionID: sessionid, service: this, client: clientWithCookieJson(jar, this.Proxy)}
+	return &HttpRequest{header: http.Header{}, method: "GET", sessionID: sessionid, service: this, client: this.clientWithCookieJson(jar)}
 }
 func (this *HttpService) Post(sessionid string) *HttpRequest {
 	var jar []byte
@@ -42,7 +43,7 @@ func (this *HttpService) Post(sessionid string) *HttpRequest {
 		jar = data.([]byte)
 	}
 	logger.Debug("[cookies]load from cache", string(jar))
-	return &HttpRequest{header: http.Header{}, method: "POST", sessionID: sessionid, service: this, client: clientWithCookieJson(jar, this.Proxy)}
+	return &HttpRequest{header: http.Header{}, method: "POST", sessionID: sessionid, service: this, client: this.clientWithCookieJson(jar)}
 }
 
 func (this *HttpService) saveCookie(sessionID string, cookieJar interface{}) {
@@ -239,8 +240,8 @@ func buildQueryEncoded(source [][]string, gb18030 bool) []byte {
 		buf.WriteByte('&')
 	}
 	result := buf.Bytes()
-	if result[len(result)-1] == '&' {
-		result = result[:len(result)-1]
+	if result[len(result) - 1] == '&' {
+		result = result[:len(result) - 1]
 	}
 	return result
 }
@@ -258,23 +259,23 @@ func buildEncoded(source map[string][]string, gb18030 bool) []byte {
 		}
 	}
 	result := buf.Bytes()
-	if result[len(result)-1] == '&' {
-		result = result[:len(result)-1]
+	if result[len(result) - 1] == '&' {
+		result = result[:len(result) - 1]
 	}
 	return result
 }
 
-func clientWithCookieJson(src []byte, proxyAddr ...string) *http.Client {
+func (this *HttpService) clientWithCookieJson(src []byte) *http.Client {
 	var cl *http.Client
 	dialer := &net.Dialer{Timeout: time.Second * 90}
 
-	if len(proxyAddr) == 0 || proxyAddr[0] == "" {
+	if this.Proxy == "" {
 		cl = &http.Client{Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			Dial:            dialer.Dial,
 		}}
 	} else {
-		proxyDialer, _ := proxy.SOCKS5("tcp", proxyAddr[0], nil, dialer)
+		proxyDialer, _ := proxy.SOCKS5("tcp", this.Proxy, this.Auth, dialer)
 		cl = &http.Client{Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			Dial:            proxyDialer.Dial,
