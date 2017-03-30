@@ -24,9 +24,10 @@ type Cache interface {
 var logger = summer.NewSimpleLog("http", summer.DebugLevel)
 
 type HttpService struct {
-	Proxy string
-	Auth  *proxy.Auth
-	Cache Cache
+	Timeout time.Duration
+	Proxy   string
+	Auth    *proxy.Auth
+	Cache   Cache
 }
 
 func (this *HttpService) Get(sessionid string) *HttpRequest {
@@ -240,8 +241,8 @@ func buildQueryEncoded(source [][]string, gb18030 bool) []byte {
 		buf.WriteByte('&')
 	}
 	result := buf.Bytes()
-	if result[len(result) - 1] == '&' {
-		result = result[:len(result) - 1]
+	if result[len(result)-1] == '&' {
+		result = result[:len(result)-1]
 	}
 	return result
 }
@@ -259,8 +260,8 @@ func buildEncoded(source map[string][]string, gb18030 bool) []byte {
 		}
 	}
 	result := buf.Bytes()
-	if result[len(result) - 1] == '&' {
-		result = result[:len(result) - 1]
+	if result[len(result)-1] == '&' {
+		result = result[:len(result)-1]
 	}
 	return result
 }
@@ -281,6 +282,7 @@ func (this *HttpService) clientWithCookieJson(src []byte) *http.Client {
 			Dial:            proxyDialer.Dial,
 		}}
 	}
+	cl.Timeout = this.Timeout
 	if tr, ok := cl.Transport.(*http.Transport); ok {
 		tr.ExpectContinueTimeout = 0
 	}
