@@ -38,8 +38,8 @@ func NewNoSSLVerify() *client {
 	},
 	}
 }
-func New(client *http.Client) *client {
-	return &client{cl: client}
+func New(cl *http.Client) *client {
+	return &client{cl: cl}
 }
 
 func (cl *client) Get(url string) *HttpRequest {
