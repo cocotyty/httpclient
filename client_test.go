@@ -1,8 +1,9 @@
 package httpclient
 
 import (
-	"testing"
 	"fmt"
+	"github.com/golang/glog"
+	"testing"
 )
 
 func TestGet(t *testing.T) {

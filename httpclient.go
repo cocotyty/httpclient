@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"github.com/cocotyty/cookiejar"
-	"github.com/cocotyty/summer"
+	logger "github.com/golang/glog"
 	"golang.org/x/net/proxy"
 	"golang.org/x/net/publicsuffix"
 	"golang.org/x/text/encoding/simplifiedchinese"
@@ -69,8 +69,6 @@ type Cache interface {
 	Set(key string, value interface{}, exp time.Duration)
 }
 
-var logger = summer.NewSimpleLog("http", summer.DebugLevel)
-
 type HttpService struct {
 	Timeout time.Duration
 	Proxy   string
@@ -83,7 +81,7 @@ func (this *HttpService) Get(sessionid string) *HttpRequest {
 	if data, found := this.Cache.Get("http/" + sessionid); found && data != nil {
 		jar = data.([]byte)
 	}
-	logger.Debug("[cookies]load from cache", string(jar))
+	logger.Info("[cookies]load from cache", string(jar))
 	return &HttpRequest{header: http.Header{}, method: "GET", sessionID: sessionid, service: this, client: this.clientWithCookieJson(jar)}
 }
 func (this *HttpService) Post(sessionid string) *HttpRequest {
@@ -91,13 +89,13 @@ func (this *HttpService) Post(sessionid string) *HttpRequest {
 	if data, found := this.Cache.Get("http/" + sessionid); found && data != nil {
 		jar = data.([]byte)
 	}
-	logger.Debug("[cookies]load from cache", string(jar))
+	logger.Info("[cookies]load from cache", string(jar))
 	return &HttpRequest{header: http.Header{}, method: "POST", sessionID: sessionid, service: this, client: this.clientWithCookieJson(jar)}
 }
 
 func (this *HttpService) saveCookie(sessionID string, cookieJar interface{}) {
 	data, _ := json.Marshal(cookieJar)
-	logger.Debug("[cookies]save to cache", string(data))
+	logger.Info("[cookies]save to cache", string(data))
 	this.Cache.Set("http/"+sessionID, data, time.Minute*60)
 }
 
@@ -236,7 +234,7 @@ func (req *HttpRequest) Send() (resp *HttpResponse) {
 	if req.querys != nil {
 		req.url = req.url + "?" + string(buildQueryEncoded(req.querys, req.gb18030))
 	}
-	logger.Debug(req.url)
+	logger.Info(req.url)
 	if req.params != nil {
 		req.body = buildEncoded(req.params, req.gb18030)
 	}
@@ -335,19 +333,19 @@ func (this *HttpService) clientWithCookieJson(src []byte) *http.Client {
 		tr.ExpectContinueTimeout = 0
 	}
 	cl.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		logger.Debug(req.URL)
+		logger.Info(req.URL)
 		return nil
 	}
 	if src == nil {
 		Jars, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 		if err != nil {
-			logger.Debug("[cookie-jar-err]", err)
+			logger.Info("[cookie-jar-err]", err)
 		}
 		cl.Jar = Jars
 	} else {
 		Jars, err := cookiejar.LoadFromJson(&cookiejar.Options{PublicSuffixList: publicsuffix.List}, src)
 		if err != nil {
-			logger.Debug("[cookie-jar-err]", err)
+			logger.Info("[cookie-jar-err]", err)
 		}
 		cl.Jar = Jars
 	}
