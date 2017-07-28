@@ -10,7 +10,10 @@ import (
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"net/http"
 	"net/url"
+	"regexp"
 )
+
+var contentTypeMatchCharset = regexp.MustCompile(`\bcharset=([\w|\-]*)`)
 
 type HttpResponse struct {
 	code     int
@@ -36,7 +39,7 @@ func (resp *HttpResponse) HTML() (doc *goquery.Document, err error) {
 	return goquery.NewDocumentFromReader(bytes.NewReader(data))
 }
 
-func (resp *HttpResponse) HTMLDetectedEncode() (*goquery.Document, error) {
+func (resp *HttpResponse) HTMLDetectedEncode() (doc *goquery.Document, err error) {
 	if resp.err != nil {
 		return nil, resp.err
 	}
@@ -46,15 +49,40 @@ func (resp *HttpResponse) HTMLDetectedEncode() (*goquery.Document, error) {
 		if err != nil {
 			return nil, err
 		}
-		encName := doc.Find("meta[charset]").AttrOr("charset", "utf8")
-		enc, err = htmlindex.Get(encName)
+		encName := ""
+		selector := doc.Find("meta[charset]")
+		if selector != nil && selector.Size() > 0 {
+			encName, _ = selector.Attr("charset")
+			glog.Info("find html encode ", encName)
+		} else {
+			selector = doc.Find(`meta[http-equiv="Content-Type"]`)
+			if selector != nil && selector.Size() > 0 {
+				attrContent, exists := selector.Attr("content")
+				glog.Info("find html encode from content ", attrContent)
+				if exists {
+					subMatch := contentTypeMatchCharset.FindStringSubmatch(attrContent)
+					if len(subMatch) == 2 {
+						glog.Info("find html encode ", subMatch[1])
+						encName = subMatch[1]
+					}
+				}
+			}
+		}
+		if encName != "" {
+			enc, err = htmlindex.Get(encName)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	data := resp.body
+
+	if enc != nil {
+		data, err = enc.NewDecoder().Bytes(resp.body)
 		if err != nil {
 			return nil, err
 		}
-	}
-	data, err := enc.NewDecoder().Bytes(resp.body)
-	if err != nil {
-		return nil, err
 	}
 	return goquery.NewDocumentFromReader(bytes.NewReader(data))
 }
