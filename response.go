@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/golang/glog"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/encoding/simplifiedchinese"
@@ -93,6 +94,7 @@ func (resp *HttpResponse) JSON(data interface{}) error {
 	if resp.err != nil {
 		return resp.err
 	}
+	glog.Info(string(resp.body))
 	return json.Unmarshal(resp.body, data)
 }
 func (resp *HttpResponse) GB18030() (string, error) {
