@@ -37,6 +37,7 @@ type Builder struct {
 	Proxy              string
 	Auth               *proxy.Auth
 	Cache              Cache
+	UserAgentsPool     []string
 }
 
 func (builder *Builder) loadCache(sessionID string) (data []byte) {
@@ -68,6 +69,7 @@ func (builder *Builder) Request(sessionID string) *HttpRequest {
 	jarData := builder.loadCache(sessionID)
 	return NewHttpRequest(builder.makeCookieClient(jarData)).
 		SetCookieStore(builder.storeCookie).
+		SetUserAgentPool(builder.UserAgentsPool).
 		Session(sessionID)
 }
 

@@ -5,23 +5,28 @@ import (
 
 	"bytes"
 	"github.com/cocotyty/json"
+	"hash/fnv"
 	"io/ioutil"
 	"net/http"
 )
 
+// from my mac
+const defaultUA = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Safari/537.36`
+
 type HttpRequest struct {
-	method        string
-	url           string
-	gb18030       bool
-	header        http.Header
-	body          []byte
-	jsonData      interface{}
-	querys        [][]string
-	params        map[string][]string
-	client        *http.Client
-	storeCookieFn StoreCookie
-	sessionID     string
-	cookies       []*http.Cookie
+	method         string
+	url            string
+	gb18030        bool
+	header         http.Header
+	body           []byte
+	jsonData       interface{}
+	querys         [][]string
+	params         map[string][]string
+	client         *http.Client
+	storeCookieFn  StoreCookie
+	sessionID      string
+	cookies        []*http.Cookie
+	UserAgentsPool []string
 }
 
 func NewHttpRequest(client *http.Client) *HttpRequest {
@@ -29,6 +34,10 @@ func NewHttpRequest(client *http.Client) *HttpRequest {
 }
 func (req *HttpRequest) SetCookieStore(store StoreCookie) *HttpRequest {
 	req.storeCookieFn = store
+	return req
+}
+func (req *HttpRequest) SetUserAgentPool(uas []string) *HttpRequest {
+	req.UserAgentsPool = uas
 	return req
 }
 func (req *HttpRequest) Session(sessionID string) *HttpRequest {
@@ -124,6 +133,28 @@ func (req *HttpRequest) JSON(data interface{}) *HttpRequest {
 func (req *HttpRequest) Body(body []byte) *HttpRequest {
 	req.body = body
 	return req
+}
+func (req *HttpRequest) RefererInHeader(refer string) *HttpRequest {
+	return req.Head("Referer", refer)
+}
+
+func (req *HttpRequest) UserAgentInHeader(userAgent string) *HttpRequest {
+	return req.Head("User-Agent", userAgent)
+}
+
+func (req *HttpRequest) AutoSelectUserAgent() *HttpRequest {
+	if req.UserAgentsPool == nil || len(req.UserAgentsPool) == 0 {
+		return req.UserAgentInHeader(defaultUA)
+	}
+
+	hash := fnv.New64()
+	hash.Write([]byte(req.sessionID))
+	index := hash.Sum64()
+
+	return req.UserAgentInHeader(req.UserAgentsPool[index%uint64(len(req.UserAgentsPool))])
+}
+func (req *HttpRequest) OriginInHeader(origin string) *HttpRequest {
+	return req.Head("Origin", origin)
 }
 
 func (req *HttpRequest) Head(k, v string) *HttpRequest {
