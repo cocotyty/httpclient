@@ -2,7 +2,6 @@ package httpclient
 
 import (
 	"fmt"
-	"github.com/golang/glog"
 	"testing"
 )
 
