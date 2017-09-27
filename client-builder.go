@@ -4,7 +4,7 @@ import (
 	"crypto/tls"
 	"github.com/cocotyty/cookiejar"
 	"github.com/cocotyty/json"
-	logger "github.com/golang/glog"
+	logger "github.com/cocotyty/mlog"
 	"golang.org/x/net/proxy"
 	"golang.org/x/net/publicsuffix"
 	"net"
@@ -105,19 +105,19 @@ func (builder *Builder) makeCookieClient(cookieJarBytes []byte) *http.Client {
 		tr.ExpectContinueTimeout = 0
 	}
 	cl.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		logger.Info(req.URL)
+		logger.Debug(req.URL)
 		return nil
 	}
 	if cookieJarBytes == nil {
 		Jars, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 		if err != nil {
-			logger.Info("[cookie-jar-err]", err)
+			logger.Debug("[cookie-jar-err]", err)
 		}
 		cl.Jar = Jars
 	} else {
 		Jars, err := cookiejar.LoadFromJson(&cookiejar.Options{PublicSuffixList: publicsuffix.List}, cookieJarBytes)
 		if err != nil {
-			logger.Info("[cookie-jar-err]", err)
+			logger.Debug("[cookie-jar-err]", err)
 		}
 		cl.Jar = Jars
 	}

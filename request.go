@@ -1,7 +1,7 @@
 package httpclient
 
 import (
-	logger "github.com/golang/glog"
+	logger "github.com/cocotyty/mlog"
 
 	"bytes"
 	"github.com/cocotyty/json"
@@ -177,7 +177,7 @@ func (req *HttpRequest) Send() (resp *HttpResponse) {
 	if req.querys != nil {
 		req.url = req.url + "?" + string(buildQueryEncoded(req.querys, req.gb18030))
 	}
-	logger.Info(req.url)
+	logger.Debug(req.url)
 	if req.params != nil {
 		req.body = buildEncoded(req.params, req.gb18030)
 	}

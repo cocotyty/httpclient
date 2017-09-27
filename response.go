@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/golang/glog"
+	glog "github.com/cocotyty/mlog"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/encoding/simplifiedchinese"
@@ -53,16 +53,16 @@ func (resp *HttpResponse) HTMLDetectedEncode() (doc *goquery.Document, err error
 		selector := doc.Find("meta[charset]")
 		if selector != nil && selector.Size() > 0 {
 			encName, _ = selector.Attr("charset")
-			glog.Info("find html encode ", encName)
+			glog.Debug("find html encode ", encName)
 		} else {
 			selector = doc.Find(`meta[http-equiv="Content-Type"]`)
 			if selector != nil && selector.Size() > 0 {
 				attrContent, exists := selector.Attr("content")
-				glog.Info("find html encode from content ", attrContent)
+				glog.Debug("find html encode from content ", attrContent)
 				if exists {
 					subMatch := contentTypeMatchCharset.FindStringSubmatch(attrContent)
 					if len(subMatch) == 2 {
-						glog.Info("find html encode ", subMatch[1])
+						glog.Debug("find html encode ", subMatch[1])
 						encName = subMatch[1]
 					}
 				}
@@ -122,7 +122,7 @@ func (resp *HttpResponse) JSON(data interface{}) error {
 	if resp.err != nil {
 		return resp.err
 	}
-	glog.Info(string(resp.body))
+	glog.Debug(string(resp.body))
 	return json.Unmarshal(resp.body, data)
 }
 func (resp *HttpResponse) GB18030() (string, error) {
