@@ -1,7 +1,9 @@
 package httpclient
 
 import (
+	"github.com/cocotyty/cookiejar"
 	logger "github.com/cocotyty/mlog"
+	"golang.org/x/net/publicsuffix"
 
 	"bytes"
 	"github.com/cocotyty/json"
@@ -206,6 +208,9 @@ func (req *HttpRequest) Send() (resp *HttpResponse) {
 		hrep.Host = req.host
 	}
 	if req.cookies != nil {
+		if req.client.Jar == nil {
+			req.client.Jar, _ = cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+		}
 		req.client.Jar.SetCookies(hrep.URL, req.cookies)
 	}
 	hrep.Header = req.header
