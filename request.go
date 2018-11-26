@@ -16,6 +16,7 @@ const defaultUA = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_5) AppleWebKit/5
 type HttpRequest struct {
 	method         string
 	url            string
+	host           string
 	gb18030        bool
 	header         http.Header
 	body           []byte
@@ -90,10 +91,12 @@ func (req *HttpRequest) AddCookie(ck *http.Cookie) *HttpRequest {
 	req.cookies = append(req.cookies, ck)
 	return req
 }
+
 func (req *HttpRequest) Url(url string) *HttpRequest {
 	req.url = url
 	return req
 }
+
 func (req *HttpRequest) Query(k, v string) *HttpRequest {
 	if req.querys == nil {
 		req.querys = [][]string{}
@@ -101,6 +104,7 @@ func (req *HttpRequest) Query(k, v string) *HttpRequest {
 	req.querys = append(req.querys, []string{k, v})
 	return req
 }
+
 func (req *HttpRequest) QueryArray(k string, vs []string) *HttpRequest {
 	if req.querys == nil {
 		req.querys = [][]string{}
@@ -136,6 +140,11 @@ func (req *HttpRequest) Body(body []byte) *HttpRequest {
 }
 func (req *HttpRequest) RefererInHeader(refer string) *HttpRequest {
 	return req.Head("Referer", refer)
+}
+
+func (req *HttpRequest) Host(host string) *HttpRequest {
+	req.host = host
+	return req
 }
 
 func (req *HttpRequest) UserAgentInHeader(userAgent string) *HttpRequest {
@@ -192,6 +201,9 @@ func (req *HttpRequest) Send() (resp *HttpResponse) {
 	if err != nil {
 		resp.err = err
 		return
+	}
+	if req.host != "" {
+		hrep.Host = req.host
 	}
 	if req.cookies != nil {
 		req.client.Jar.SetCookies(hrep.URL, req.cookies)
