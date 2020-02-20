@@ -198,6 +198,7 @@ func (req *HttpRequest) Send() (resp *HttpResponse) {
 		req.body = buildEncoded(req.params, req.gb18030)
 	}
 	if req.jsonData != nil {
+		req.header.Set("Content-Type", "application/json")
 		req.body, err = json.Marshal(req.jsonData)
 		if err != nil {
 			resp.err = err
