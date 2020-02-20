@@ -85,11 +85,15 @@ func (req *HttpRequest) Options() *HttpRequest {
 	return req
 }
 
+func (req *HttpRequest) Cookies(raw string) *HttpRequest {
+	var request http.Request
+	request.Header = http.Header{"Cookie": []string{raw}}
+	cookies := request.Cookies()
+	req.cookies = append(req.cookies, cookies...)
+	return req
+}
+
 func (req *HttpRequest) AddCookie(ck *http.Cookie) *HttpRequest {
-	if req.cookies == nil {
-		req.cookies = []*http.Cookie{ck}
-		return req
-	}
 	req.cookies = append(req.cookies, ck)
 	return req
 }
@@ -164,6 +168,7 @@ func (req *HttpRequest) AutoSelectUserAgent() *HttpRequest {
 
 	return req.UserAgentInHeader(req.UserAgentsPool[index%uint64(len(req.UserAgentsPool))])
 }
+
 func (req *HttpRequest) OriginInHeader(origin string) *HttpRequest {
 	return req.Head("Origin", origin)
 }

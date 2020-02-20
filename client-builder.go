@@ -59,7 +59,7 @@ func (builder *Builder) saveCache(sessionID string, data interface{}) {
 	}
 	cachedTime := builder.SessionCachedTime
 	if cachedTime == emptyDuration {
-		cachedTime = builder.SessionCachedTime
+		cachedTime = defaultCachedTime
 	}
 	builder.Cache.Set(defaultCachePrefix+sessionID, data, cachedTime)
 	return
