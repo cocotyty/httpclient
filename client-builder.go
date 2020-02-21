@@ -9,6 +9,7 @@ import (
 	"golang.org/x/net/publicsuffix"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -38,6 +39,8 @@ type Builder struct {
 	Auth               *proxy.Auth
 	Cache              Cache
 	UserAgentsPool     []string
+	transport          *http.Transport
+	once               sync.Once
 }
 
 func (builder *Builder) loadCache(sessionID string) (data []byte) {
@@ -65,7 +68,25 @@ func (builder *Builder) saveCache(sessionID string, data interface{}) {
 	return
 }
 
+func (builder *Builder) initTransport() {
+	builder.transport = &http.Transport{
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+		MaxConnsPerHost:       2000,
+		MaxIdleConns:          2000,
+		IdleConnTimeout:       time.Minute,
+		ExpectContinueTimeout: 0,
+	}
+	dialer := &net.Dialer{Timeout: builder.Timeout}
+	if builder.Proxy == "" {
+		builder.transport.DialContext = dialer.DialContext
+	} else {
+		proxyDialer, _ := proxy.SOCKS5("tcp", builder.Proxy, builder.Auth, dialer)
+		builder.transport.DialContext = proxyDialer.(proxy.ContextDialer).DialContext
+	}
+}
+
 func (builder *Builder) Request(sessionID string) *HttpRequest {
+	builder.once.Do(builder.initTransport)
 	jarData := builder.loadCache(sessionID)
 	return NewHttpRequest(builder.makeCookieClient(jarData)).
 		SetCookieStore(builder.storeCookie).
@@ -86,24 +107,9 @@ func (builder *Builder) storeCookie(sessionID string, cookieJar http.CookieJar) 
 }
 
 func (builder *Builder) makeCookieClient(cookieJarBytes []byte) *http.Client {
-	var cl *http.Client
-	dialer := &net.Dialer{Timeout: builder.Timeout}
-	if builder.Proxy == "" {
-		cl = &http.Client{Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			Dial:            dialer.Dial,
-		}}
-	} else {
-		proxyDialer, _ := proxy.SOCKS5("tcp", builder.Proxy, builder.Auth, dialer)
-		cl = &http.Client{Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			Dial:            proxyDialer.Dial,
-		}}
-	}
+	var cl = &http.Client{}
+	cl.Transport = builder.transport
 	cl.Timeout = builder.Timeout
-	if tr, ok := cl.Transport.(*http.Transport); ok {
-		tr.ExpectContinueTimeout = 0
-	}
 	cl.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		logger.Debug(req.URL)
 		return nil
