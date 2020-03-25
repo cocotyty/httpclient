@@ -2,15 +2,15 @@ package httpclient
 
 import (
 	"crypto/tls"
-	"github.com/cocotyty/cookiejar"
-	"github.com/cocotyty/json"
-	logger "github.com/cocotyty/mlog"
-	"golang.org/x/net/proxy"
-	"golang.org/x/net/publicsuffix"
+	"encoding/json"
 	"net"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/cocotyty/cookiejar"
+	"golang.org/x/net/proxy"
+	"golang.org/x/net/publicsuffix"
 )
 
 var emptyDuration time.Duration
@@ -23,12 +23,12 @@ type StoreCookie func(sessionID string, jar http.CookieJar)
 
 type HttpService Builder
 
-func (hs *HttpService) Get(sessionid string) *HttpRequest {
-	return (*Builder)(hs).Get(sessionid)
+func (s *HttpService) Get(sessionid string) *HttpRequest {
+	return (*Builder)(s).Get(sessionid)
 }
 
-func (hs *HttpService) Post(sessionid string) *HttpRequest {
-	return (*Builder)(hs).Post(sessionid)
+func (s *HttpService) Post(sessionid string) *HttpRequest {
+	return (*Builder)(s).Post(sessionid)
 }
 
 type Builder struct {
@@ -37,9 +37,9 @@ type Builder struct {
 	Timeout            time.Duration
 	Proxy              string
 	Auth               *proxy.Auth
-	Cache              Cache
+	Cache              Cache // Cache to store cookies
 	UserAgentsPool     []string
-	transport          *http.Transport
+	Transport          *http.Transport
 	once               sync.Once
 }
 
@@ -69,29 +69,39 @@ func (builder *Builder) saveCache(sessionID string, data interface{}) {
 }
 
 func (builder *Builder) initTransport() {
-	builder.transport = &http.Transport{
-		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
-		MaxConnsPerHost:       2000,
-		MaxIdleConns:          2000,
-		IdleConnTimeout:       time.Minute,
-		ExpectContinueTimeout: 0,
+	if builder.Transport == nil {
+		builder.Transport = &http.Transport{
+			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
+			MaxConnsPerHost:       2000,
+			MaxIdleConns:          2000,
+			IdleConnTimeout:       time.Minute,
+			ExpectContinueTimeout: 0,
+		}
 	}
 	dialer := &net.Dialer{Timeout: builder.Timeout}
 	if builder.Proxy == "" {
-		builder.transport.DialContext = dialer.DialContext
+		builder.Transport.DialContext = dialer.DialContext
 	} else {
 		proxyDialer, _ := proxy.SOCKS5("tcp", builder.Proxy, builder.Auth, dialer)
-		builder.transport.DialContext = proxyDialer.(proxy.ContextDialer).DialContext
+		builder.Transport.DialContext = proxyDialer.(proxy.ContextDialer).DialContext
 	}
 }
 
-func (builder *Builder) Request(sessionID string) *HttpRequest {
+func (builder *Builder) newRequest(sessionID string, noAutoRedirect bool) *HttpRequest {
 	builder.once.Do(builder.initTransport)
 	jarData := builder.loadCache(sessionID)
-	return NewHttpRequest(builder.makeCookieClient(jarData)).
+	return NewHttpRequest(builder.injectCookiesClient(jarData, noAutoRedirect)).
 		SetCookieStore(builder.storeCookie).
 		SetUserAgentPool(builder.UserAgentsPool).
 		Session(sessionID)
+}
+
+func (builder *Builder) NoAutoRedirectRequest(sessionID string) *HttpRequest {
+	return builder.newRequest(sessionID, true)
+}
+
+func (builder *Builder) Request(sessionID string) *HttpRequest {
+	return builder.newRequest(sessionID, false)
 }
 
 func (builder *Builder) Get(sessionID string) *HttpRequest {
@@ -106,24 +116,24 @@ func (builder *Builder) storeCookie(sessionID string, cookieJar http.CookieJar) 
 	builder.saveCache(sessionID, data)
 }
 
-func (builder *Builder) makeCookieClient(cookieJarBytes []byte) *http.Client {
+func (builder *Builder) injectCookiesClient(cookieJarBytes []byte, noAutoRedirect bool) *http.Client {
 	var cl = &http.Client{}
-	cl.Transport = builder.transport
+	cl.Transport = builder.Transport
 	cl.Timeout = builder.Timeout
 	cl.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		logger.Debug(req.URL)
+		if noAutoRedirect {
+			return http.ErrUseLastResponse
+		}
 		return nil
 	}
 	if cookieJarBytes == nil {
 		Jars, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 		if err != nil {
-			logger.Debug("[cookie-jar-err]", err)
 		}
 		cl.Jar = Jars
 	} else {
 		Jars, err := cookiejar.LoadFromJson(&cookiejar.Options{PublicSuffixList: publicsuffix.List}, cookieJarBytes)
 		if err != nil {
-			logger.Debug("[cookie-jar-err]", err)
 		}
 		cl.Jar = Jars
 	}

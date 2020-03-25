@@ -11,6 +11,7 @@ type client struct {
 	cl *http.Client
 }
 
+// NewNoSSLVerify create a client which will skip ssl verify.
 func NewNoSSLVerify() *client {
 	return &client{cl: &http.Client{
 		Transport: &http.Transport{
@@ -29,6 +30,7 @@ func NewNoSSLVerify() *client {
 	},
 	}
 }
+
 func New(cl *http.Client) *client {
 	return &client{cl: cl}
 }

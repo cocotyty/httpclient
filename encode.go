@@ -2,18 +2,19 @@ package httpclient
 
 import (
 	"bytes"
-	"golang.org/x/text/encoding/simplifiedchinese"
 	"net/url"
+
+	"golang.org/x/text/encoding"
 )
 
-func buildQueryEncoded(source [][]string, gb18030 bool) []byte {
+func encodeQuery(source [][]string, encoding encoding.Encoding) []byte {
 	buf := bytes.NewBuffer(nil)
 	for _, kv := range source {
 		k, v := kv[0], kv[1]
 		buf.WriteString(k)
 		buf.WriteByte('=')
-		if gb18030 {
-			v, _ = simplifiedchinese.GB18030.NewEncoder().String(v)
+		if encoding != nil {
+			v, _ = encoding.NewEncoder().String(v)
 		}
 		buf.WriteString(url.QueryEscape(v))
 		buf.WriteByte('&')
@@ -25,14 +26,14 @@ func buildQueryEncoded(source [][]string, gb18030 bool) []byte {
 	return result
 }
 
-func buildEncoded(source map[string][]string, gb18030 bool) []byte {
+func encodeForm(source map[string][]string, encoding encoding.Encoding) []byte {
 	buf := bytes.NewBuffer(nil)
 	for k, strs := range source {
 		for _, v := range strs {
 			buf.WriteString(k)
 			buf.WriteByte('=')
-			if gb18030 {
-				v, _ = simplifiedchinese.GB18030.NewEncoder().String(v)
+			if encoding!=nil {
+				v, _ = encoding.NewEncoder().String(v)
 			}
 			buf.WriteString(url.QueryEscape(v))
 			buf.WriteByte('&')

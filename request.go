@@ -1,42 +1,49 @@
 package httpclient
 
 import (
-	"github.com/cocotyty/cookiejar"
-	logger "github.com/cocotyty/mlog"
-	"golang.org/x/net/publicsuffix"
-
 	"bytes"
-	"github.com/cocotyty/json"
+	"encoding/json"
 	"hash/fnv"
+	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
+	"os"
+
+	"github.com/cocotyty/cookiejar"
+	"golang.org/x/net/publicsuffix"
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/htmlindex"
 )
 
 // from my mac
 const defaultUA = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Safari/537.36`
 
 type HttpRequest struct {
+	err            error
 	method         string
 	url            string
 	host           string
-	gb18030        bool
+	encoding       encoding.Encoding
 	header         http.Header
 	body           []byte
 	jsonData       interface{}
 	querys         [][]string
 	params         map[string][]string
 	client         *http.Client
-	storeCookieFn  StoreCookie
+	storeCookie    StoreCookie
 	sessionID      string
 	cookies        []*http.Cookie
 	UserAgentsPool []string
+	dumpRequest    io.WriteCloser
+	dumpResponse   io.WriteCloser
 }
 
 func NewHttpRequest(client *http.Client) *HttpRequest {
 	return &HttpRequest{header: http.Header{}, client: client}
 }
 func (req *HttpRequest) SetCookieStore(store StoreCookie) *HttpRequest {
-	req.storeCookieFn = store
+	req.storeCookie = store
 	return req
 }
 func (req *HttpRequest) SetUserAgentPool(uas []string) *HttpRequest {
@@ -128,6 +135,7 @@ func (req *HttpRequest) Param(k string, v string) *HttpRequest {
 	req.params[k] = []string{v}
 	return req
 }
+
 func (req *HttpRequest) ParamArray(k string, v []string) *HttpRequest {
 	if req.params == nil {
 		req.params = make(map[string][]string)
@@ -136,14 +144,17 @@ func (req *HttpRequest) ParamArray(k string, v []string) *HttpRequest {
 	req.params[k] = v
 	return req
 }
+
 func (req *HttpRequest) JSON(data interface{}) *HttpRequest {
 	req.jsonData = data
 	return req
 }
+
 func (req *HttpRequest) Body(body []byte) *HttpRequest {
 	req.body = body
 	return req
 }
+
 func (req *HttpRequest) RefererInHeader(refer string) *HttpRequest {
 	return req.Head("Referer", refer)
 }
@@ -163,7 +174,7 @@ func (req *HttpRequest) AutoSelectUserAgent() *HttpRequest {
 	}
 
 	hash := fnv.New64()
-	hash.Write([]byte(req.sessionID))
+	_, _ = hash.Write([]byte(req.sessionID))
 	index := hash.Sum64()
 
 	return req.UserAgentInHeader(req.UserAgentsPool[index%uint64(len(req.UserAgentsPool))])
@@ -178,24 +189,50 @@ func (req *HttpRequest) Head(k, v string) *HttpRequest {
 	return req
 }
 
-func (req *HttpRequest) GB18030() *HttpRequest {
-	req.gb18030 = true
+func (req *HttpRequest) Encoding(name string) *HttpRequest {
+	req.encoding, req.err = htmlindex.Get(name)
 	return req
 }
 
-func (req *HttpRequest) UTF8() *HttpRequest {
-	req.gb18030 = false
+func (req *HttpRequest) Dump() *HttpRequest {
+	req.dumpRequest = &dumpPrinter{firstLine: ">> request >>"}
+	req.dumpResponse = &dumpPrinter{firstLine: "<< response <<"}
 	return req
 }
+
+type dumpPrinter struct {
+	firstLine string
+	bytes.Buffer
+}
+
+func (d *dumpPrinter) Close() error {
+	lines := bytes.Split(d.Buffer.Bytes(), []byte("\n"))
+	os.Stderr.WriteString(d.firstLine)
+	os.Stderr.Write([]byte{'\n'})
+	for _, line := range lines {
+		os.Stderr.Write(line)
+		os.Stderr.Write([]byte{'\n'})
+	}
+	return nil
+}
+
+func (req *HttpRequest) DumpTo(request io.WriteCloser, response io.WriteCloser) *HttpRequest {
+	req.dumpRequest = request
+	req.dumpResponse = response
+	return req
+}
+
 func (req *HttpRequest) Send() (resp *HttpResponse) {
+	if req.err != nil {
+		return &HttpResponse{err: req.err}
+	}
 	resp = &HttpResponse{}
 	var err error
 	if req.querys != nil {
-		req.url = req.url + "?" + string(buildQueryEncoded(req.querys, req.gb18030))
+		req.url = req.url + "?" + string(encodeQuery(req.querys, req.encoding))
 	}
-	logger.Debug(req.url)
 	if req.params != nil {
-		req.body = buildEncoded(req.params, req.gb18030)
+		req.body = encodeForm(req.params, req.encoding)
 	}
 	if req.jsonData != nil {
 		req.header.Set("Content-Type", "application/json")
@@ -205,37 +242,50 @@ func (req *HttpRequest) Send() (resp *HttpResponse) {
 			return
 		}
 	}
-	hrep, err := http.NewRequest(req.method, req.url, bytes.NewReader(req.body))
+	request, err := http.NewRequest(req.method, req.url, bytes.NewReader(req.body))
 	if err != nil {
 		resp.err = err
 		return
 	}
 	if req.host != "" {
-		hrep.Host = req.host
+		request.Host = req.host
 	}
 	if req.cookies != nil {
 		if req.client.Jar == nil {
 			req.client.Jar, _ = cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 		}
-		req.client.Jar.SetCookies(hrep.URL, req.cookies)
+		req.client.Jar.SetCookies(request.URL, req.cookies)
 	}
-	hrep.Header = req.header
-	hresp, err := req.client.Do(hrep)
-	if hresp != nil && hresp.Body != nil {
-		defer hresp.Body.Close()
-	}
-	if err != nil {
-		resp.err = err
-		return
+	request.Header = req.header
+
+	if req.dumpRequest != nil {
+		data, _ := httputil.DumpRequest(request, true)
+		_, _ = req.dumpRequest.Write(data)
+		_ = req.dumpRequest.Close()
 	}
 
-	data, err := ioutil.ReadAll(hresp.Body)
+	response, err := req.client.Do(request)
+
+	if req.dumpResponse != nil && response != nil {
+		data, _ := httputil.DumpResponse(response, true)
+		_, _ = req.dumpResponse.Write(data)
+		_ = req.dumpResponse.Close()
+	}
+
+	if response != nil && response.Body != nil {
+		defer response.Body.Close()
+	}
 	if err != nil {
 		resp.err = err
 		return
 	}
-	if req.storeCookieFn != nil {
-		req.storeCookieFn(req.sessionID, req.client.Jar)
+	data, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		resp.err = err
+		return
 	}
-	return &HttpResponse{code: hresp.StatusCode, body: data, header: hresp.Header, url: hresp.Request.URL}
+	if req.storeCookie != nil {
+		req.storeCookie(req.sessionID, req.client.Jar)
+	}
+	return &HttpResponse{code: response.StatusCode, body: data, header: response.Header, url: response.Request.URL}
 }
