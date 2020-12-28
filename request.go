@@ -69,6 +69,11 @@ func (req *HttpRequest) Post() *HttpRequest {
 	return req
 }
 
+func (req *HttpRequest) Put() *HttpRequest {
+	req.method = http.MethodPut
+	return req
+}
+
 func (req *HttpRequest) Patch() *HttpRequest {
 	req.method = http.MethodPatch
 	return req
@@ -83,6 +88,7 @@ func (req *HttpRequest) Delete() *HttpRequest {
 	req.method = http.MethodDelete
 	return req
 }
+
 func (req *HttpRequest) MethodHead() *HttpRequest {
 	req.method = http.MethodHead
 	return req
