@@ -2,6 +2,7 @@ package httpclient
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"hash/fnv"
 	"io"
@@ -20,6 +21,7 @@ import (
 const defaultUA = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Safari/537.36`
 
 type HttpRequest struct {
+	ctx            context.Context
 	err            error
 	method         string
 	url            string
@@ -109,6 +111,10 @@ func (req *HttpRequest) Cookies(raw string) *HttpRequest {
 func (req *HttpRequest) AddCookie(ck *http.Cookie) *HttpRequest {
 	req.cookies = append(req.cookies, ck)
 	return req
+}
+
+func (req *HttpRequest) Context(ctx context.Context){
+	req.ctx = ctx
 }
 
 func (req *HttpRequest) Url(url string) *HttpRequest {
@@ -252,6 +258,9 @@ func (req *HttpRequest) Send() (resp *HttpResponse) {
 	if err != nil {
 		resp.err = err
 		return
+	}
+	if req.ctx != nil{
+		request = request.WithContext(req.ctx)
 	}
 	if req.host != "" {
 		request.Host = req.host
