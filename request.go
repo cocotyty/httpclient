@@ -113,8 +113,9 @@ func (req *HttpRequest) AddCookie(ck *http.Cookie) *HttpRequest {
 	return req
 }
 
-func (req *HttpRequest) Context(ctx context.Context){
+func (req *HttpRequest) Context(ctx context.Context)*HttpRequest{
 	req.ctx = ctx
+	return req
 }
 
 func (req *HttpRequest) Url(url string) *HttpRequest {
